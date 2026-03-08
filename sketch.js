@@ -3,7 +3,7 @@ let r1 = 80, r2 = 180, r3 = 280;
 let r4 = 284;  // radius for semi-circle ring (between r1 and r2)
 
 // Pixel size: change these to make dots bigger/smaller or closer/farther apart
-let dotSize = 2;           // size of each dot (try 2–6)
+let dotSize = 1.5;           // size of each dot (try 2–6)
 let circleDotSpacing = 8;  // spacing of dots on the circle rings
 let fillSpacing = 4;       // spacing of dots filling the areas
 
@@ -13,6 +13,10 @@ let butterflySpin = 0;
 
 let flowerspin = 0;
 
+// Butterfly Generation
+let butterflyCount = 4;
+let butterflyRadius = 130;
+
 // Scallop 
 let scallopCount = 45;
 let scallopR = 30;
@@ -20,6 +24,24 @@ let scallopR = 30;
 // Ripple effect when mouse hovers
 let rippleRadius = 40;
 let rippleStrength = 200;
+
+let poem = [
+  "Flowers",
+  "resting",
+  "on",
+  "the sand",
+  "butterflies fluttering",
+  "across my cheek",
+  "doiles sitting in the sun",
+  "things that make me",
+  "homesick"
+];
+
+let poemIndex = 0;
+
+function mousePressed() {
+  poemIndex = (poemIndex + 1) % poem.length;
+}
 
 function setup() {
   createCanvas(800, 800);
@@ -49,15 +71,19 @@ function draw() {
 
   // 4 butterflies - all same direction as 90 and 180 (wings horizontal)
   fill(150, 220, 150);
-  let positions = [0, 90, 180, 270];
-  for (let i = 0; i < 4; i++) {
-    let a = radians(positions[i]);
-    let x = cx + 130 * cos(a);
-    let y = cy + 130 * sin(a);
+  for (let i = 0; i < butterflyCount; i++) {
+
+    let a = TWO_PI * i / butterflyCount;
+  
+    let x = cx + butterflyRadius * cos(a);
+    let y = cy + butterflyRadius * sin(a);
+  
     drawButterfly(x, y);
   }
 
   drawScallopedEdge(cx, cy, r3, scallopR, scallopCount);
+
+  drawCircularText(cx, cy, 90);
 
   // Pixels filling middle ring
   fill(80);
@@ -207,4 +233,50 @@ function drawScallopedEdge(cx, cy, radius, scallopR, count) {
 
     dotsInCircle(x, y, scallopR);
   }
+}
+
+// Draws Poem near the centre 
+function drawCircularText(cx, cy, radius) {
+
+  let word = poem[poemIndex];
+  let step = TWO_PI / word.length;
+
+  push();
+  translate(cx, cy);
+
+  textAlign(CENTER, CENTER);
+  textSize(16);
+  fill(60);
+
+  for (let i = 0; i < word.length; i++) {
+
+    let a = i * step - HALF_PI;
+
+    push();
+
+    rotate(a);
+    translate(radius, 0);
+    rotate(HALF_PI);
+
+    text(word[i], 0, 0);
+
+    pop();
+  }
+
+  pop();
+}
+
+// Regenerate Pattern
+function keyPressed() {
+
+  if (key === 'h') {
+
+    butterflyCount = floor(random(2,7));
+    flowerCount = floor(random(6,14));
+
+    scallopCount = floor(random(30,60));
+
+    palette = random(palettes);
+  }
+
 }
