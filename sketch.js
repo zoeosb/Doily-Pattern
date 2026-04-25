@@ -13,9 +13,21 @@ let butterflySpin = 0;
 
 let flowerspin = 0;
 
-// Butterfly Generation
-let butterflyCount = 4;
-let butterflyRadius = 130;
+// Butterfly and flower count for Pattern 
+let butterflyCount;
+let flowerCount;
+
+let flowerColors = [];
+let butterflyPositions = [];
+
+let palettes = [
+  ["#FF9999"],
+  ["#CCCCFF"],
+  ["#f6d7a7"],
+  ["#a6c8ff"],
+];
+
+let palette;
 
 // Scallop 
 let scallopCount = 45;
@@ -25,29 +37,17 @@ let scallopR = 30;
 let rippleRadius = 40;
 let rippleStrength = 200;
 
-let poem = [
-  "Flowers",
-  "resting",
-  "on",
-  "the sand",
-  "butterflies fluttering",
-  "across my cheek",
-  "doiles sitting in the sun",
-  "things that make me",
-  "homesick"
-];
 
-let poemIndex = 0;
-
-function mousePressed() {
-  poemIndex = (poemIndex + 1) % poem.length;
-}
 
 function setup() {
   createCanvas(800, 800);
   cx = width / 2;
   cy = height / 2;
+  
+  generatePattern();
 }
+
+
 
 function draw() {
   background(255);
@@ -65,36 +65,44 @@ function draw() {
   // Pixels filling inside center circle (then we draw flower on top)
   fill(80);
   dotsInCircle(cx, cy, r1 - 4);
+  
+  
 
   // Center flower (pixels)
-  drawFlowerPixels(cx, cy, 6, 25, 15, 40, 10);  // 6 petals, center radius 15
+  drawFlowerPixels(cx, cy, 6, 25, 15, 40, 10,"#FFC8C8");  // 6 petals, center radius 15
 
-  // 4 butterflies - all same direction as 90 and 180 (wings horizontal)
-  fill(150, 220, 150);
+
+
+  // 4 butterflies - generative location
   for (let i = 0; i < butterflyCount; i++) {
 
-    let a = TWO_PI * i / butterflyCount;
+    let a = butterflyPositions[i];
   
-    let x = cx + butterflyRadius * cos(a);
-    let y = cy + butterflyRadius * sin(a);
+    let x = cx + 130 * cos(a);
+    let y = cy + 130 * sin(a);
   
     drawButterfly(x, y);
   }
 
   drawScallopedEdge(cx, cy, r3, scallopR, scallopCount);
 
-  drawCircularText(cx, cy, 90);
 
-  // Pixels filling middle ring
-  fill(80);
-  dotsInRing(cx, cy, r1 + 2, r2 - 2);
+
+    // Pixels filling middle ring
+    fill(80);
+    dotsInRing(cx, cy, r1 + 2, r2 - 2);
 
   // 10 flowers in outer ring (pixels)
-  for (let i = 0; i < 10; i++) {
-    let a = (TWO_PI * i) / 10 - HALF_PI;
+  for (let i = 0; i < flowerCount; i++) {
+
+    let a = TWO_PI * i / flowerCount - HALF_PI;
+  
     let x = cx + 230 * cos(a);
     let y = cy + 230 * sin(a);
-    drawFlowerPixels(x, y, 5, 10, 8, 20, 7);  // 5 petals, center radius 7
+  
+    fill(flowerColors[i]);
+  
+    drawFlowerPixels(x, y, 5, 10, 8, 20, 7, flowerColors[i]);
   }
 
   // Pixels filling outer ring
@@ -103,7 +111,7 @@ function draw() {
 }
 
 // Draw a flower made of small pixels (petals + center)
-function drawFlowerPixels(x, y, petals, petalOffset, petalW, petalH, centerR) {
+function drawFlowerPixels(x, y, petals, petalOffset, petalW, petalH, centerR, petalColor) {
   noStroke();
 
   let flowerSpacing = 2;
@@ -111,7 +119,7 @@ function drawFlowerPixels(x, y, petals, petalOffset, petalW, petalH, centerR) {
   let halfH = petalH / 3;
 
   // Petals
-  fill(255, 150, 150);
+  fill(petalColor);
   for (let p = 0; p < petals; p++) {
     let baseAngle = (TWO_PI * p) / petals - HALF_PI;
     for (let px = -halfW; px <= halfW; px += flowerSpacing) {
@@ -147,7 +155,7 @@ function drawButterfly(x, y) {
 
   noStroke();
 
-  fill(150, 220, 150);
+  fill(170, 233, 166);
 
   // left wings
   push();
@@ -235,48 +243,35 @@ function drawScallopedEdge(cx, cy, radius, scallopR, count) {
   }
 }
 
-// Draws Poem near the centre 
-function drawCircularText(cx, cy, radius) {
 
-  let word = poem[poemIndex];
-  let step = TWO_PI / word.length;
 
-  push();
-  translate(cx, cy);
-
-  textAlign(CENTER, CENTER);
-  textSize(16);
-  fill(60);
-
-  for (let i = 0; i < word.length; i++) {
-
-    let a = i * step - HALF_PI;
-
-    push();
-
-    rotate(a);
-    translate(radius, 0);
-    rotate(HALF_PI);
-
-    text(word[i], 0, 0);
-
-    pop();
-  }
-
-  pop();
-}
 
 // Regenerate Pattern
-function keyPressed() {
 
-  if (key === 'h') {
+  function keyPressed(){
 
-    butterflyCount = floor(random(2,7));
-    flowerCount = floor(random(6,14));
+    if(key === 'h'){
+      generatePattern();
+    }
+  
+  }
 
-    scallopCount = floor(random(30,60));
+function generatePattern(){
 
-    palette = random(palettes);
+  butterflyCount = floor(random(2,7));
+  flowerCount = floor(random(6,14));
+
+  palette = random(palettes);
+
+  flowerColors = [];
+  butterflyPositions = [];
+
+  for(let i = 0; i < flowerCount; i++){
+    flowerColors.push(random(palette));
+  }
+
+  for(let i = 0; i < butterflyCount; i++){
+    butterflyPositions.push(TWO_PI * i / butterflyCount);
   }
 
 }
