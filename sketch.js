@@ -44,7 +44,7 @@ let scallopR = 30;
 
 // Ripple effect when mouse hovers
 let rippleRadius = 40;
-let rippleStrength = 200;
+let rippleStrength = 300;
 
 
 let dotColor = "#fff47a";
