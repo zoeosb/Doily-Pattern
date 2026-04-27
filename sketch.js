@@ -618,7 +618,7 @@ function drawPoemLine() {
 
 function drawPixelGradientBackground() {
   let lineStep = max(2, round(fillSpacing));
-  let topColor = color(217, 116, 120);
+  let topColor = color(217, 174, 155);
   let midColor = color(196, 135, 114);
   let bottomColor = color(217, 116, 120);
 
