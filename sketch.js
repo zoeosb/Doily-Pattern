@@ -6,6 +6,19 @@ let r4 = 284;  // radius for semi-circle ring (between r1 and r2)
 // Pixel size: change these to make dots bigger/smaller or closer/farther apart
 let dotSize = 2;           // size of each dot (try 2–6)
 let flowerDotSize = 1.5;     // flower-only dot size
+// Outer-ring flowers (independent controls)
+let outerFlowerDotSize = 1.5;
+let outerFlowerPetals = 5;
+let outerFlowerPetalOffset = 14;
+let outerFlowerPetalW = 10;
+let outerFlowerPetalH = 22;
+let outerFlowerCenterR = 7;
+let outerFlowerInnerPetals = 0;
+let outerFlowerInnerOffset = 7;
+let outerFlowerInnerW = 5;
+let outerFlowerInnerH = 11;
+let outerFlowerInnerCenterR = 3;
+let outerFlowerMaskPadding = 2.5; // increase for slightly larger flower cutout
 let circleDotSpacing = 8;  // spacing of dots on the circle rings
 let fillSpacing = 4;       // spacing of dots filling the areas
 
@@ -21,6 +34,7 @@ let flowerspin = 0;
 // Butterfly and flower count for Pattern
 let butterflyCount;
 let flowerCount;
+let doilyShape = "circle"; // "circle" or "square"
 
 let flowerColors = [];
 let butterflyPositions = [];
@@ -34,12 +48,14 @@ let palettes = [
 ];
 
 
-let palette;
+let palette;  
 
 
 // Scallop
-let scallopCount = 45;
-let scallopR = 30;
+let scallopCount = 45;       // circle scallop count
+let scallopR = 30;           // circle scallop radius
+let squareScallopCount = 52; // square scallop count
+let squareScallopR = 23;     // square scallop radius
 
 
 // Ripple effect when mouse hovers
@@ -106,17 +122,27 @@ function draw() {
 
 
 
-  // Circles made of small pixels (inner two)
-  fill(dotColor);
-  noStroke();
-  drawCirclePixels(cx, cy, r1);
-  drawCirclePixels(cx, cy, r2);
-  drawCirclePixels(cx, cy, r4);
-
-
-  // Pixels filling inside center circle (then we draw flower on top)
-  fill(dotColor);
-  dotsInCircle(cx, cy, r1 - 4);
+  // Main doily geometry changes by sequence (circle or square)
+  if (doilyShape === "circle") {
+    fill(dotColor);
+    noStroke();
+    drawCirclePixels(cx, cy, r1);
+    drawCirclePixels(cx, cy, r2);
+    drawCirclePixels(cx, cy, r4);
+    fill(dotColor);
+    dotsInCircle(cx, cy, r1 - 4);
+  } else {
+    let s1 = 80;
+    let s2 = 180;
+    let s3 = 284;
+    fill(dotColor);
+    noStroke();
+    drawSquareRingPixels(cx, cy, s1);
+    drawSquareRingPixels(cx, cy, s2);
+    drawSquareRingPixels(cx, cy, s3);
+    fill(dotColor);
+    dotsInSquare(cx, cy, s1 - 8);
+  }
  
  
   // Center flower (pixels)
@@ -137,36 +163,72 @@ function draw() {
 
   }
 
+  if (doilyShape === "circle") {
+    drawScallopedEdge(cx, cy, r3, scallopR, scallopCount);
+  } else {
+    drawSquareScallopedEdge(cx, cy, 284, squareScallopR, squareScallopCount);
+  }
 
-  drawScallopedEdge(cx, cy, r3, scallopR, scallopCount);
-
-
-    // Pixels filling middle ring
-    fill(dotColor);
-    dotsInRing(cx, cy, r1 + 2, r2 - 2);
-
-
-  // 10 flowers in outer ring (pixels)
-  for (let i = 0; i < flowerCount; i++) {
-
-
-    let a = TWO_PI * i / flowerCount - HALF_PI;
- 
-    let x = cx + 230 * cos(a);
-    let y = cy + 230 * sin(a);
- 
-    fill(flowerColors[i]);
- 
-    drawFlowerPixels(x, y, 5, 10, 8, 20, 7, flowerColors[i]);
-
-
-     // Pixels filling outer ring
+  // Pixels filling middle ring
   fill(dotColor);
-  dotsInRing(cx, cy, r2 + 2, r3 - 2);
-}
+  if (doilyShape === "circle") {
+    dotsInRing(cx, cy, r1 + 2, r2 - 2);
+  } else {
+    dotsInSquareRing(cx, cy, 84, 176);
+  }
+
+  // Outer-ring flowers: positions + masked fill so dots never overlap flowers.
+  let outerFlowerPositions = [];
+  for (let i = 0; i < flowerCount; i++) {
+    let x, y;
+    if (doilyShape === "circle") {
+      let a = TWO_PI * i / flowerCount - HALF_PI;
+      x = cx + 230 * cos(a);
+      y = cy + 230 * sin(a);
+    } else {
+      let p = getPointOnSquarePerimeter(cx, cy, 230, i / flowerCount);
+      x = p.x;
+      y = p.y;
+    }
+    outerFlowerPositions.push({ x, y });
+  }
+
+  // Pixels filling outer ring with flower cutouts (mask effect).
+  fill(dotColor);
+  if (doilyShape === "circle") {
+    dotsInRingMaskedByFlowerShape(cx, cy, r2 + 2, r3 - 2, outerFlowerPositions);
+  } else {
+    dotsInSquareRingMaskedByFlowerShape(cx, cy, 184, 280, outerFlowerPositions);
+  }
+
+  // Draw larger crochet-integrated flowers on top, using flower color sequence.
+  for (let i = 0; i < outerFlowerPositions.length; i++) {
+    let p = outerFlowerPositions[i];
+    let c = flowerColors[i % flowerColors.length];
+    drawFlowerPixels(
+      p.x, p.y,
+      outerFlowerPetals,
+      outerFlowerPetalOffset,
+      outerFlowerPetalW,
+      outerFlowerPetalH,
+      outerFlowerCenterR,
+      c,
+      outerFlowerDotSize
+    );
+    drawFlowerPixels(
+      p.x, p.y,
+      outerFlowerInnerPetals,
+      outerFlowerInnerOffset,
+      outerFlowerInnerW,
+      outerFlowerInnerH,
+      outerFlowerInnerCenterR,
+      c,
+      outerFlowerDotSize
+    );
+  }
 
   // 4 corner flowers using center flower geometry
-  let cornerMargin = 88;
+  let cornerMargin = 64;
   let cornerFlowers = [
     { x: cornerMargin, y: cornerMargin },
     { x: width - cornerMargin, y: cornerMargin },
@@ -187,10 +249,21 @@ function draw() {
   drawPoemLine();
 }
 
+function drawCrochetFlowerHalo(x, y, radius) {
+  noStroke();
+  fill(dotColor);
+  let count = 16;
+  for (let i = 0; i < count; i++) {
+    let a = TWO_PI * i / count;
+    ellipse(x + radius * cos(a), y + radius * sin(a), dotSize, dotSize);
+  }
+}
+
 
 // Draw a flower made of small pixels (petals + center)
-function drawFlowerPixels(x, y, petals, petalOffset, petalW, petalH, centerR, petalColor) {
+function drawFlowerPixels(x, y, petals, petalOffset, petalW, petalH, centerR, petalColor, customDotSize) {
   noStroke();
+  let dot = customDotSize === undefined ? flowerDotSize : customDotSize;
 
 
   let flowerSpacing = 2;
@@ -208,7 +281,7 @@ function drawFlowerPixels(x, y, petals, petalOffset, petalW, petalH, centerR, pe
         if ((px * px) / (halfW * halfW) + (dy * dy) / (halfH * halfH) <= 1) {
           let gx = x + px * cos(baseAngle) - py * sin(baseAngle);
           let gy = y + px * sin(baseAngle) + py * cos(baseAngle);
-          ellipse(gx, gy, flowerDotSize, flowerDotSize);
+          ellipse(gx, gy, dot, dot);
         }
       }
     }
@@ -220,7 +293,7 @@ function drawFlowerPixels(x, y, petals, petalOffset, petalW, petalH, centerR, pe
   for (let px = -centerR; px <= centerR; px += flowerSpacing) {
     for (let py = -centerR; py <= centerR; py += flowerSpacing) {
       if (px * px + py * py <= centerR * centerR) {
-        ellipse(x + px, y + py, flowerDotSize, flowerDotSize);
+        ellipse(x + px, y + py, dot, dot);
       }
     }
   }
@@ -241,7 +314,7 @@ function drawButterfly(x, y) {
   noStroke();
 
 
-  fill(242, 184, 187);
+  fill(235, 178, 178);
 
 
   // left wings
@@ -261,7 +334,7 @@ function drawButterfly(x, y) {
 
 
   // body
-  fill(204, 141, 144);
+  fill(209, 142, 142);
   ellipse(0, 0, 8, 30);
 
 
@@ -306,6 +379,144 @@ function dotsInRing(cx, cy, innerR, outerR) {
   }
 }
 
+function dotsInRingMasked(cx, cy, innerR, outerR, cutouts, cutoutR) {
+  noStroke();
+  for (let x = cx - outerR; x <= cx + outerR; x += fillSpacing) {
+    for (let y = cy - outerR; y <= cy + outerR; y += fillSpacing) {
+      let d = dist(x, y, cx, cy);
+      if (d >= innerR && d <= outerR && !isInsideAnyFlowerCutout(x, y, cutouts, cutoutR)) {
+        drawRippleDot(x, y);
+      }
+    }
+  }
+}
+
+function dotsInRingMaskedByFlowerShape(cx, cy, innerR, outerR, flowerPositions) {
+  noStroke();
+  for (let x = cx - outerR; x <= cx + outerR; x += fillSpacing) {
+    for (let y = cy - outerR; y <= cy + outerR; y += fillSpacing) {
+      let d = dist(x, y, cx, cy);
+      if (d >= innerR && d <= outerR && !isInsideAnyOuterFlowerShape(x, y, flowerPositions)) {
+        drawRippleDot(x, y);
+      }
+    }
+  }
+}
+
+
+function drawSquareRingPixels(cx, cy, halfSide) {
+  noStroke();
+  for (let x = cx - halfSide; x <= cx + halfSide; x += circleDotSpacing) {
+    ellipse(x, cy - halfSide, dotSize, dotSize);
+    ellipse(x, cy + halfSide, dotSize, dotSize);
+  }
+  for (let y = cy - halfSide; y <= cy + halfSide; y += circleDotSpacing) {
+    ellipse(cx - halfSide, y, dotSize, dotSize);
+    ellipse(cx + halfSide, y, dotSize, dotSize);
+  }
+}
+
+function dotsInSquare(cx, cy, halfSide) {
+  noStroke();
+  for (let x = cx - halfSide; x <= cx + halfSide; x += fillSpacing) {
+    for (let y = cy - halfSide; y <= cy + halfSide; y += fillSpacing) {
+      drawRippleDot(x, y);
+    }
+  }
+}
+
+function dotsInSquareRing(cx, cy, innerHalf, outerHalf) {
+  noStroke();
+  for (let x = cx - outerHalf; x <= cx + outerHalf; x += fillSpacing) {
+    for (let y = cy - outerHalf; y <= cy + outerHalf; y += fillSpacing) {
+      let d = max(abs(x - cx), abs(y - cy));
+      if (d >= innerHalf && d <= outerHalf) {
+        drawRippleDot(x, y);
+      }
+    }
+  }
+}
+
+function dotsInSquareRingMasked(cx, cy, innerHalf, outerHalf, cutouts, cutoutR) {
+  noStroke();
+  for (let x = cx - outerHalf; x <= cx + outerHalf; x += fillSpacing) {
+    for (let y = cy - outerHalf; y <= cy + outerHalf; y += fillSpacing) {
+      let d = max(abs(x - cx), abs(y - cy));
+      if (d >= innerHalf && d <= outerHalf && !isInsideAnyFlowerCutout(x, y, cutouts, cutoutR)) {
+        drawRippleDot(x, y);
+      }
+    }
+  }
+}
+
+function dotsInSquareRingMaskedByFlowerShape(cx, cy, innerHalf, outerHalf, flowerPositions) {
+  noStroke();
+  for (let x = cx - outerHalf; x <= cx + outerHalf; x += fillSpacing) {
+    for (let y = cy - outerHalf; y <= cy + outerHalf; y += fillSpacing) {
+      let d = max(abs(x - cx), abs(y - cy));
+      if (d >= innerHalf && d <= outerHalf && !isInsideAnyOuterFlowerShape(x, y, flowerPositions)) {
+        drawRippleDot(x, y);
+      }
+    }
+  }
+}
+
+
+function isInsideAnyFlowerCutout(x, y, cutouts, cutoutR) {
+  for (let i = 0; i < cutouts.length; i++) {
+    if (dist(x, y, cutouts[i].x, cutouts[i].y) < cutoutR) return true;
+  }
+  return false;
+}
+
+function isInsideAnyOuterFlowerShape(px, py, flowerPositions) {
+  for (let i = 0; i < flowerPositions.length; i++) {
+    let p = flowerPositions[i];
+    if (
+      pointInDoilyFlowerLayer(px, py, p.x, p.y, outerFlowerPetals, outerFlowerPetalOffset, outerFlowerPetalW, outerFlowerPetalH, outerFlowerCenterR) ||
+      pointInDoilyFlowerLayer(px, py, p.x, p.y, outerFlowerInnerPetals, outerFlowerInnerOffset, outerFlowerInnerW, outerFlowerInnerH, outerFlowerInnerCenterR)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function pointInDoilyFlowerLayer(px, py, cx, cy, petals, petalOffset, petalW, petalH, centerR) {
+  if (petals <= 0) return false;
+  let dx = px - cx;
+  let dy = py - cy;
+  let halfW = petalW + outerFlowerMaskPadding;
+  let halfH = petalH / 3 + outerFlowerMaskPadding;
+  let center = centerR + outerFlowerMaskPadding;
+
+  // Center circle test
+  if (dx * dx + dy * dy <= center * center) return true;
+
+  // Petal ellipse tests (same geometry as drawFlowerPixels)
+  for (let p = 0; p < petals; p++) {
+    let a = (TWO_PI * p) / petals - HALF_PI;
+    let lx = dx * cos(-a) - dy * sin(-a);
+    let ly = dx * sin(-a) + dy * cos(-a);
+    let pyOff = ly - petalOffset;
+    if ((lx * lx) / (halfW * halfW) + (pyOff * pyOff) / (halfH * halfH) <= 1) {
+      return true;
+    }
+  }
+  return false;
+}
+
+
+function getPointOnSquarePerimeter(cx, cy, halfSide, t) {
+  let side = halfSide * 2;
+  let perimeter = side * 4;
+  let d = (t % 1) * perimeter;
+  if (d < side) return { x: cx - halfSide + d, y: cy - halfSide };
+  if (d < side * 2) return { x: cx + halfSide, y: cy - halfSide + (d - side) };
+  if (d < side * 3) return { x: cx + halfSide - (d - side * 2), y: cy + halfSide };
+  return { x: cx - halfSide, y: cy + halfSide - (d - side * 3) };
+}
+
 
 function drawRippleDot(px, py) {
   let d = dist(px, py, mouseX, mouseY);
@@ -343,6 +554,15 @@ function drawScallopedEdge(cx, cy, radius, scallopR, count) {
   }
 }
 
+function drawSquareScallopedEdge(cx, cy, halfSide, scallopR, count) {
+  noStroke();
+  fill(dotColor);
+  for (let i = 0; i < count; i++) {
+    let p = getPointOnSquarePerimeter(cx, cy, halfSide, i / count);
+    dotsInCircle(p.x, p.y, scallopR);
+  }
+}
+
 function drawHelpPopup() {
   let elapsed = millis() - popupStartTime;
   if (elapsed > popupShowMs + popupFadeMs) return;
@@ -354,13 +574,13 @@ function drawHelpPopup() {
 
   push();
   rectMode(CENTER);
-  textAlign(CENTER, BOTTOM);
+  textAlign(CENTER, CENTER);
   textSize(20);
   noStroke();
-  fill(0, 120 * (alpha / 255));
+  fill(255, 255, 255, alpha * 0.5);
   rect(width / 2, 42, 160, 44, 12);
 
-  fill(255, alpha);
+  fill(255, 153, 153, alpha); // Text color
   text("Press H", width / 2, 42);
   pop();
 }
@@ -398,7 +618,7 @@ function drawPoemLine() {
 
 function drawPixelGradientBackground() {
   let lineStep = max(2, round(fillSpacing));
-  let topColor = color(217, 174, 155);
+  let topColor = color(217, 116, 120);
   let midColor = color(196, 135, 114);
   let bottomColor = color(217, 116, 120);
 
@@ -456,7 +676,8 @@ function generatePattern(){
 
 
   butterflyCount = floor(random(2,7));
-  flowerCount = floor(random(6,14));
+  doilyShape = random(["circle", "square"]);
+  flowerCount = doilyShape === "circle" ? floor(random(6,10)) : floor(random(7,11));
 
 
   palette = random(palettes);
