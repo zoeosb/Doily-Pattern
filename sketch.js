@@ -4,7 +4,8 @@ let r4 = 284;  // radius for semi-circle ring (between r1 and r2)
 
 
 // Pixel size: change these to make dots bigger/smaller or closer/farther apart
-let dotSize = 1.5;           // size of each dot (try 2–6)
+let dotSize = 2;           // size of each dot (try 2–6)
+let flowerDotSize = 1.5;     // flower-only dot size
 let circleDotSpacing = 8;  // spacing of dots on the circle rings
 let fillSpacing = 4;       // spacing of dots filling the areas
 
@@ -21,16 +22,15 @@ let flowerspin = 0;
 let butterflyCount;
 let flowerCount;
 
-
 let flowerColors = [];
 let butterflyPositions = [];
 
 
 let palettes = [
-  ["#FF9999"],
-  ["#CCCCFF"],
-  ["#f6d7a7"],
-  ["#a6c8ff"],
+  ["#FF9999"],//Pink
+  ["#CCCCFF"],//Blue
+  ["#f6d7a7"],//Cream
+  ["#a6c8ff"],//Light Blue
 ];
 
 
@@ -47,11 +47,11 @@ let rippleRadius = 40;
 let rippleStrength = 300;
 
 
-let dotColor = "#fff47a";
+let dotColor = "#f6d7a7";
 
 
 // Poem
-let poem = [ "Flowers resting on the sand", "butterflies fluttering across my cheek", "doiles sitting in the sun", "things that make me", "homesick" ];
+let poem = [ "BUTTERFLIES FLUTTERING ACROSS MY CHEEK", "FLOWERS RESTING ON THE SAND", "DOILES SITTING IN THE SUN", "THINGS THAT MAKE ME", "HOMESICK" ];
 
 
 let poemIndex = 0;
@@ -60,16 +60,17 @@ let poemAlpha = 0;
 // Poem caption settings
 let poemTextSize = 20;        // main size target
 let poemTextMinSize = 14;     // smallest allowed when fitting width
-let poemTextColor = "#e8a94a";
+let poemTextColor = "#ffffff";
 
 // Poem font: leave poemFontFile empty to use a system / web font name; or set a path like "fonts/MyFont.ttf"
 let poemFontFile = "";
-let poemFontFamily = "Pixelify Sans"; // loaded in index.html via Google Fonts
+let poemFontFamily = "Doto"; // loaded in index.html via Google Fonts
 let poemFontCustom = null;
 
 let popupStartTime = 0;
 let popupShowMs = 3000;
 let popupFadeMs = 1000;
+let showGameFrame = true;
 
 
 
@@ -93,7 +94,11 @@ function setup() {
 
 
 function draw() {
-  background(150, 96, 100);
+  drawPixelGradientBackground();
+
+  if (showGameFrame) {
+    drawGameFrame();
+  }
 
 
   butterflySpin += 0.00;   // controls spinning speed
@@ -160,6 +165,21 @@ function draw() {
   dotsInRing(cx, cy, r2 + 2, r3 - 2);
 }
 
+  // 4 corner flowers using center flower geometry
+  let cornerMargin = 88;
+  let cornerFlowers = [
+    { x: cornerMargin, y: cornerMargin },
+    { x: width - cornerMargin, y: cornerMargin },
+    { x: cornerMargin, y: height - cornerMargin },
+    { x: width - cornerMargin, y: height - cornerMargin }
+  ];
+
+  for (let i = 0; i < cornerFlowers.length; i++) {
+    let p = cornerFlowers[i];
+    let c = flowerColors[i % flowerColors.length];
+    drawFlowerPixels(p.x, p.y, 6, 25, 15, 40, 10, c);
+  }
+
   // Small popup instruction
   drawHelpPopup();
 
@@ -188,7 +208,7 @@ function drawFlowerPixels(x, y, petals, petalOffset, petalW, petalH, centerR, pe
         if ((px * px) / (halfW * halfW) + (dy * dy) / (halfH * halfH) <= 1) {
           let gx = x + px * cos(baseAngle) - py * sin(baseAngle);
           let gy = y + px * sin(baseAngle) + py * cos(baseAngle);
-          ellipse(gx, gy, dotSize, dotSize);
+          ellipse(gx, gy, flowerDotSize, flowerDotSize);
         }
       }
     }
@@ -200,7 +220,7 @@ function drawFlowerPixels(x, y, petals, petalOffset, petalW, petalH, centerR, pe
   for (let px = -centerR; px <= centerR; px += flowerSpacing) {
     for (let py = -centerR; py <= centerR; py += flowerSpacing) {
       if (px * px + py * py <= centerR * centerR) {
-        ellipse(x + px, y + py, dotSize, dotSize);
+        ellipse(x + px, y + py, flowerDotSize, flowerDotSize);
       }
     }
   }
@@ -221,7 +241,7 @@ function drawButterfly(x, y) {
   noStroke();
 
 
-  fill(204, 158, 145);
+  fill(242, 184, 187);
 
 
   // left wings
@@ -241,7 +261,7 @@ function drawButterfly(x, y) {
 
 
   // body
-  fill(217, 185, 176);
+  fill(204, 141, 144);
   ellipse(0, 0, 8, 30);
 
 
@@ -323,7 +343,6 @@ function drawScallopedEdge(cx, cy, radius, scallopR, count) {
   }
 }
 
-
 function drawHelpPopup() {
   let elapsed = millis() - popupStartTime;
   if (elapsed > popupShowMs + popupFadeMs) return;
@@ -377,6 +396,43 @@ function drawPoemLine() {
   pop();
 }
 
+function drawPixelGradientBackground() {
+  let lineStep = max(2, round(fillSpacing));
+  let topColor = color(217, 174, 155);
+  let midColor = color(196, 135, 114);
+  let bottomColor = color(217, 116, 120);
+
+  strokeWeight(lineStep);
+  for (let y = 0; y < height; y += lineStep) {
+    let t = y / height;
+    let c;
+    if (t < 0.5) {
+      c = lerpColor(topColor, midColor, t * 2);
+    } else {
+      c = lerpColor(midColor, bottomColor, (t - 0.5) * 2);
+    }
+    stroke(c);
+    line(0, y, width, y);
+  }
+}
+
+function drawGameFrame() {
+  push();
+  let gridSize = max(2, round(fillSpacing));
+
+  // White pixel grid overlay
+  stroke(255, 55);
+  strokeWeight(1);
+  for (let y = 0; y < height; y += gridSize) {
+    line(0, y, width, y);
+  }
+  for (let x = 0; x < width; x += gridSize) {
+    line(x, 0, x, height);
+  }
+
+  pop();
+}
+
 
 // Regenerate Pattern
 
@@ -387,6 +443,10 @@ function drawPoemLine() {
     if(key === 'h' || key === 'H'){
       generatePattern();
       popupStartTime = millis();
+    }
+
+    if (key === 'f' || key === 'F') {
+      showGameFrame = !showGameFrame;
     }
  
   }
