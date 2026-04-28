@@ -19,6 +19,25 @@ let outerFlowerInnerW = 5;
 let outerFlowerInnerH = 11;
 let outerFlowerInnerCenterR = 3;
 let outerFlowerMaskPadding = 2.5; // increase for slightly larger flower cutout
+// Center carnation controls (edit these)
+let centerFlowerRowCount = 4;         // number of petal rows
+let centerFlowerPetalsStart = 8;     // petals in first row
+let centerFlowerPetalsStep = 0;       // petals added each row
+let centerFlowerOffsetStart = 6;     // distance from center for first row
+let centerFlowerOffsetStep = 13;       // extra offset each row
+let centerFlowerWidthStart = 8;       // first row petal width
+let centerFlowerWidthStep = 2;        // width increase each row
+let centerFlowerHeightStart = 16;     // first row petal height
+let centerFlowerHeightStep = 6;       // height increase each row
+let centerFlowerRowPhaseStep = 0.5;   // 0.5 = half-petal stagger per row
+let centerFlowerAutoWidthFromOffset = true; // auto-stretch width by row circumference
+let centerFlowerCircumferenceFill = 1.08;   // 1.0 fills exactly, >1 slightly overlaps
+let centerFlowerRowColors = ["#FFC5D0","#f6d7a7"];
+let centerFlowerRows = [];
+let centerFlowerCoreR = 0; // set > 0 to bring back center core dots
+let centerFlowerCoreColor = "#e37ba1";
+let centerFlowerMaskPadding = 2;
+let lanternScale = 1.2; // scale oil lantern panel uniformly
 let circleDotSpacing = 8;  // spacing of dots on the circle rings
 let fillSpacing = 4;       // spacing of dots filling the areas
 
@@ -37,6 +56,7 @@ let flowerCount;
 let doilyShape = "circle"; // "circle" or "square"
 
 let flowerColors = [];
+let cornerFlowerColors = [];
 let butterflyPositions = [];
 
 
@@ -47,8 +67,29 @@ let palettes = [
   ["#a6c8ff"],//Light Blue
 ];
 
+function buildCenterFlowerRows() {
+  let rows = [];
+  for (let i = 0; i < centerFlowerRowCount; i++) {
+    let petals = max(1, centerFlowerPetalsStart + i * centerFlowerPetalsStep);
+    let offset = max(1, centerFlowerOffsetStart + i * centerFlowerOffsetStep);
+    let baseW = centerFlowerWidthStart + i * centerFlowerWidthStep;
+    let arcPerPetal = TWO_PI * offset / petals;
+    let autoW = (arcPerPetal * centerFlowerCircumferenceFill) / 2;
+    rows.push({
+      petals: petals,
+      offset: offset,
+      w: centerFlowerAutoWidthFromOffset ? max(1, autoW) : baseW,
+      h: centerFlowerHeightStart + i * centerFlowerHeightStep,
+      angleOffset: i * centerFlowerRowPhaseStep * TWO_PI / max(1, petals),
+      color: centerFlowerRowColors[min(i, centerFlowerRowColors.length - 1)]
+    });
+  }
+  return rows;
+}
+
 
 let palette;  
+let paletteIndex = 0;
 
 
 // Scallop
@@ -72,6 +113,8 @@ let poem = [ "BUTTERFLIES FLUTTERING ACROSS MY CHEEK", "FLOWERS RESTING ON THE S
 
 let poemIndex = 0;
 let poemAlpha = 0;
+let poemCycleMs = 5000;
+let lastPoemCycleMs = 0;
 
 // Sound (generative ambient tone)
 let soundEnabled = false;
@@ -109,10 +152,6 @@ let poemFontCustom = null;
 let popupStartTime = 0;
 let popupShowMs = 3000;
 let popupFadeMs = 1000;
-let showGameFrame = true;
-
-
-
 function preload() {
   if (poemFontFile && poemFontFile.length > 0) {
     poemFontCustom = loadFont(poemFontFile);
@@ -124,8 +163,10 @@ function setup() {
   createCanvas(800, 800);
   cx = width / 2;
   cy = height / 2;
+  centerFlowerRows = buildCenterFlowerRows();
 
   popupStartTime = millis();
+  lastPoemCycleMs = millis();
   setupSound();
   setupKeyboardControls();
 
@@ -135,13 +176,14 @@ function setup() {
 
 
 function draw() {
+  // Rebuild center flower rows so control changes apply immediately.
+  centerFlowerRows = buildCenterFlowerRows();
+
   drawPixelGradientBackground();
   updateSound();
   updateNavigation();
 
-  if (showGameFrame) {
-    drawGameFrame();
-  }
+  drawGameFrame();
 
   push();
   translate(camX, camY);
@@ -159,7 +201,7 @@ function draw() {
     drawCirclePixels(cx, cy, r2);
     drawCirclePixels(cx, cy, r4);
     fill(dotColor);
-    dotsInCircle(cx, cy, r1 - 4);
+    dotsInCircleMaskedByCenterFlower(cx, cy, r1 - 4, cx, cy);
   } else {
     let s1 = 80;
     let s2 = 180;
@@ -170,12 +212,12 @@ function draw() {
     drawSquareRingPixels(cx, cy, s2);
     drawSquareRingPixels(cx, cy, s3);
     fill(dotColor);
-    dotsInSquare(cx, cy, s1 - 8);
+    dotsInSquareMaskedByCenterFlower(cx, cy, s1 - 8, cx, cy);
   }
  
  
-  // Center flower (pixels)
-  drawFlowerPixels(cx, cy, 6, 25, 15, 40, 10,"#FFC8C8");  // 6 petals, center radius 15
+  // Center flower (carnation style: 4 petal rows + core)
+  drawCenterFlowerCarnation(cx, cy);
 
 
   // 4 butterflies - generative location
@@ -198,10 +240,10 @@ function draw() {
     drawSquareScallopedEdge(cx, cy, 284, squareScallopR, squareScallopCount);
   }
 
-  // Pixels filling middle ring
+  // Pixels filling middle ring (masked so dots never sit on center flower if radii overlap)
   fill(dotColor);
   if (doilyShape === "circle") {
-    dotsInRing(cx, cy, r1 + 2, r2 - 2);
+    dotsInRingMaskedByCenterFlower(cx, cy, r1 + 2, r2 - 2, cx, cy);
   } else {
     dotsInSquareRing(cx, cy, 84, 176);
   }
@@ -231,9 +273,21 @@ function draw() {
   }
 
   // Draw larger crochet-integrated flowers on top, using flower color sequence.
+  let nextPalette = getNextPaletteSequence();
+  let flowerColorCount = max(1, flowerColors.length);
+  let nextPaletteCount = max(1, nextPalette.length);
+  let worldMouseX = mouseX - camX;
+  let worldMouseY = mouseY - camY;
   for (let i = 0; i < outerFlowerPositions.length; i++) {
     let p = outerFlowerPositions[i];
-    let c = flowerColors[i % flowerColors.length];
+    let idx = i % flowerColorCount;
+    let c = flowerColors[idx] || dotColor;
+    let nextC = nextPalette[i % nextPaletteCount] || c;
+    // Hovering commits the "next sequence" flower color.
+    if (isPointInSingleOuterFlowerShape(worldMouseX, worldMouseY, p.x, p.y)) {
+      flowerColors[idx] = nextC;
+      c = nextC;
+    }
     drawFlowerPixels(
       p.x, p.y,
       outerFlowerPetals,
@@ -267,11 +321,17 @@ function draw() {
 
   for (let i = 0; i < cornerFlowers.length; i++) {
     let p = cornerFlowers[i];
-    let c = flowerColors[i % flowerColors.length];
+    let c = cornerFlowerColors[i % max(1, cornerFlowerColors.length)] || dotColor;
     drawFlowerPixels(p.x, p.y, 6, 25, 15, 40, 10, c);
   }
   drawVaseBouquetPanel();
   drawIsometricMugPanel();
+  drawOilLanternPanel();
+  if (millis() - lastPoemCycleMs >= poemCycleMs) {
+    lastPoemCycleMs = millis();
+    poemIndex = (poemIndex + 1) % poem.length;
+    poemAlpha = 0;
+  }
   drawPoemLine();
   pop();
 
@@ -293,7 +353,7 @@ function drawCrochetFlowerHalo(x, y, radius) {
 
 
 // Draw a flower made of small pixels (petals + center)
-function drawFlowerPixels(x, y, petals, petalOffset, petalW, petalH, centerR, petalColor, customDotSize) {
+function drawFlowerPixels(x, y, petals, petalOffset, petalW, petalH, centerR, petalColor, customDotSize, drawCenter = true, customCenterColor = null, angleOffset = 0) {
   noStroke();
   let dot = customDotSize === undefined ? flowerDotSize : customDotSize;
 
@@ -306,7 +366,7 @@ function drawFlowerPixels(x, y, petals, petalOffset, petalW, petalH, centerR, pe
   // Petals
   fill(petalColor);
   for (let p = 0; p < petals; p++) {
-    let baseAngle = (TWO_PI * p) / petals - HALF_PI;
+    let baseAngle = (TWO_PI * p) / petals - HALF_PI + angleOffset;
     for (let px = -halfW; px <= halfW; px += flowerSpacing) {
       for (let py = petalOffset - halfH; py <= petalOffset + halfH; py += flowerSpacing) {
         let dy = py - petalOffset;
@@ -321,16 +381,54 @@ function drawFlowerPixels(x, y, petals, petalOffset, petalW, petalH, centerR, pe
 
 
   // Center
-  fill(255, 200, 200);
-  for (let px = -centerR; px <= centerR; px += flowerSpacing) {
-    for (let py = -centerR; py <= centerR; py += flowerSpacing) {
-      if (px * px + py * py <= centerR * centerR) {
-        ellipse(x + px, y + py, dot, dot);
+  if (drawCenter && centerR > 0) {
+    if (customCenterColor) {
+      fill(customCenterColor);
+    } else {
+      fill(255, 200, 200);
+    }
+    for (let px = -centerR; px <= centerR; px += flowerSpacing) {
+      for (let py = -centerR; py <= centerR; py += flowerSpacing) {
+        if (px * px + py * py <= centerR * centerR) {
+          ellipse(x + px, y + py, dot, dot);
+        }
       }
     }
   }
 }
 
+function drawCenterFlowerCarnation(x, y) {
+  for (let i = 0; i < centerFlowerRows.length; i++) {
+    let row = centerFlowerRows[i];
+    drawFlowerPixels(
+      x,
+      y,
+      row.petals,
+      row.offset,
+      row.w,
+      row.h,
+      0,
+      row.color,
+      undefined,
+      false,
+      null,
+      row.angleOffset
+    );
+  }
+  drawFlowerPixels(
+    x,
+    y,
+    0,
+    0,
+    0,
+    0,
+    centerFlowerCoreR,
+    centerFlowerCoreColor,
+    undefined,
+    true,
+    centerFlowerCoreColor
+  );
+}
 
 function drawButterfly(x, y) {
   push();
@@ -403,6 +501,25 @@ function dotsInCircle(cx, cy, maxR) {
   }
 }
 
+function dotsInCircleMaskedByCenterFlower(cx, cy, maxR, flowerCx, flowerCy) {
+  noStroke();
+  let b = getVisibleWorldBounds(rippleRadius + 8);
+  let xStart = max(cx - maxR, b.minX);
+  let xEnd = min(cx + maxR, b.maxX);
+  let yStart = max(cy - maxR, b.minY);
+  let yEnd = min(cy + maxR, b.maxY);
+  for (let x = xStart; x <= xEnd; x += fillSpacing) {
+    for (let y = yStart; y <= yEnd; y += fillSpacing) {
+      if (
+        dist(x, y, cx, cy) < maxR &&
+        !pointInCenterFlowerShape(x, y, flowerCx, flowerCy)
+      ) {
+        drawRippleDot(x, y);
+      }
+    }
+  }
+}
+
 
 function dotsInRing(cx, cy, innerR, outerR) {
   noStroke();
@@ -415,6 +532,27 @@ function dotsInRing(cx, cy, innerR, outerR) {
     for (let y = yStart; y <= yEnd; y += fillSpacing) {
       let d = dist(x, y, cx, cy);
       if (d >= innerR && d <= outerR) {
+        drawRippleDot(x, y);
+      }
+    }
+  }
+}
+
+function dotsInRingMaskedByCenterFlower(cx, cy, innerR, outerR, flowerCx, flowerCy) {
+  noStroke();
+  let b = getVisibleWorldBounds(rippleRadius + 8);
+  let xStart = max(cx - outerR, b.minX);
+  let xEnd = min(cx + outerR, b.maxX);
+  let yStart = max(cy - outerR, b.minY);
+  let yEnd = min(cy + outerR, b.maxY);
+  for (let x = xStart; x <= xEnd; x += fillSpacing) {
+    for (let y = yStart; y <= yEnd; y += fillSpacing) {
+      let d = dist(x, y, cx, cy);
+      if (
+        d >= innerR &&
+        d <= outerR &&
+        !pointInCenterFlowerShape(x, y, flowerCx, flowerCy)
+      ) {
         drawRippleDot(x, y);
       }
     }
@@ -482,6 +620,26 @@ function dotsInSquare(cx, cy, halfSide) {
   }
 }
 
+function dotsInSquareMaskedByCenterFlower(cx, cy, halfSide, flowerCx, flowerCy) {
+  noStroke();
+  let b = getVisibleWorldBounds(rippleRadius + 8);
+  let xStart = max(cx - halfSide, b.minX);
+  let xEnd = min(cx + halfSide, b.maxX);
+  let yStart = max(cy - halfSide, b.minY);
+  let yEnd = min(cy + halfSide, b.maxY);
+  for (let x = xStart; x <= xEnd; x += fillSpacing) {
+    for (let y = yStart; y <= yEnd; y += fillSpacing) {
+      let d = max(abs(x - cx), abs(y - cy));
+      if (
+        d <= halfSide &&
+        !pointInCenterFlowerShape(x, y, flowerCx, flowerCy)
+      ) {
+        drawRippleDot(x, y);
+      }
+    }
+  }
+}
+
 function dotsInSquareRing(cx, cy, innerHalf, outerHalf) {
   noStroke();
   let b = getVisibleWorldBounds(rippleRadius + 8);
@@ -544,30 +702,37 @@ function isInsideAnyFlowerCutout(x, y, cutouts, cutoutR) {
 function isInsideAnyOuterFlowerShape(px, py, flowerPositions) {
   for (let i = 0; i < flowerPositions.length; i++) {
     let p = flowerPositions[i];
-    if (
-      pointInDoilyFlowerLayer(px, py, p.x, p.y, outerFlowerPetals, outerFlowerPetalOffset, outerFlowerPetalW, outerFlowerPetalH, outerFlowerCenterR) ||
-      pointInDoilyFlowerLayer(px, py, p.x, p.y, outerFlowerInnerPetals, outerFlowerInnerOffset, outerFlowerInnerW, outerFlowerInnerH, outerFlowerInnerCenterR)
-    ) {
+    if (isPointInSingleOuterFlowerShape(px, py, p.x, p.y)) {
       return true;
     }
   }
   return false;
 }
 
-function pointInDoilyFlowerLayer(px, py, cx, cy, petals, petalOffset, petalW, petalH, centerR) {
+function isPointInSingleOuterFlowerShape(px, py, fx, fy) {
+  return (
+    pointInDoilyFlowerLayer(px, py, fx, fy, outerFlowerPetals, outerFlowerPetalOffset, outerFlowerPetalW, outerFlowerPetalH, outerFlowerCenterR) ||
+    pointInDoilyFlowerLayer(px, py, fx, fy, outerFlowerInnerPetals, outerFlowerInnerOffset, outerFlowerInnerW, outerFlowerInnerH, outerFlowerInnerCenterR)
+  );
+}
+
+function getNextPaletteSequence() {
+  if (!palettes || palettes.length === 0) return [dotColor];
+  return palettes[(paletteIndex + 1) % palettes.length];
+}
+
+function pointInFlowerLayer(px, py, cx, cy, petals, petalOffset, petalW, petalH, centerR, maskPadding, angleOffset = 0) {
   if (petals <= 0) return false;
   let dx = px - cx;
   let dy = py - cy;
-  let halfW = petalW + outerFlowerMaskPadding;
-  let halfH = petalH / 3 + outerFlowerMaskPadding;
-  let center = centerR + outerFlowerMaskPadding;
+  let halfW = petalW + maskPadding;
+  let halfH = petalH / 3 + maskPadding;
+  let center = centerR + maskPadding;
 
-  // Center circle test
   if (dx * dx + dy * dy <= center * center) return true;
 
-  // Petal ellipse tests (same geometry as drawFlowerPixels)
   for (let p = 0; p < petals; p++) {
-    let a = (TWO_PI * p) / petals - HALF_PI;
+    let a = (TWO_PI * p) / petals - HALF_PI + angleOffset;
     let lx = dx * cos(-a) - dy * sin(-a);
     let ly = dx * sin(-a) + dy * cos(-a);
     let pyOff = ly - petalOffset;
@@ -576,6 +741,37 @@ function pointInDoilyFlowerLayer(px, py, cx, cy, petals, petalOffset, petalW, pe
     }
   }
   return false;
+}
+
+function pointInDoilyFlowerLayer(px, py, cx, cy, petals, petalOffset, petalW, petalH, centerR) {
+  return pointInFlowerLayer(px, py, cx, cy, petals, petalOffset, petalW, petalH, centerR, outerFlowerMaskPadding);
+}
+
+function pointInCenterFlowerShape(px, py, flowerCx, flowerCy) {
+  for (let i = 0; i < centerFlowerRows.length; i++) {
+    let row = centerFlowerRows[i];
+    if (
+      pointInFlowerLayer(
+        px,
+        py,
+        flowerCx,
+        flowerCy,
+        row.petals,
+        row.offset,
+        row.w,
+        row.h,
+        0,
+        centerFlowerMaskPadding,
+        row.angleOffset
+      )
+    ) {
+      return true;
+    }
+  }
+  let dx = px - flowerCx;
+  let dy = py - flowerCy;
+  let coreR = centerFlowerCoreR + centerFlowerMaskPadding;
+  return dx * dx + dy * dy <= coreR * coreR;
 }
 
 
@@ -686,9 +882,43 @@ function drawHelpPopup() {
 }
 
 
+function measurePoemLine(line) {
+  push();
+  if (poemFontCustom) {
+    textFont(poemFontCustom);
+  } else {
+    textFont(poemFontFamily);
+  }
+  let maxWidth = width - 30;
+  let size = poemTextSize;
+  textSize(size);
+  while (textWidth(line) > maxWidth && size > poemTextMinSize) {
+    size -= 1;
+    textSize(size);
+  }
+  let tw = textWidth(line);
+  let th = textAscent() + textDescent();
+  pop();
+  return { tw, th, size };
+}
+
+function isPointerOverPoemText(x, y) {
+  let m = measurePoemLine(poem[poemIndex]);
+  let pad = 8;
+  // Poem is drawn inside translate(camX, camY); match screen position for hit-testing.
+  let cx = width / 2 + camX;
+  let textBottom = height - 28 + camY;
+  let left = cx - m.tw / 2 - pad;
+  let right = cx + m.tw / 2 + pad;
+  let top = textBottom - m.th - pad;
+  let bot = textBottom + pad;
+  return x >= left && x <= right && y >= top && y <= bot;
+}
+
 function drawPoemLine() {
   poemAlpha = min(poemAlpha + 7, 255);
   let line = poem[poemIndex];
+  let m = measurePoemLine(line);
 
   push();
   textAlign(CENTER, BOTTOM);
@@ -700,14 +930,7 @@ function drawPoemLine() {
     textFont(poemFontFamily);
   }
 
-  // Make each line fill most of the canvas width while staying on one line.
-  let maxWidth = width - 30;
-  let size = poemTextSize;
-  textSize(size);
-  while (textWidth(line) > maxWidth && size > poemTextMinSize) {
-    size -= 1;
-    textSize(size);
-  }
+  textSize(m.size);
 
   let c = color(poemTextColor);
   c.setAlpha(poemAlpha);
@@ -755,10 +978,10 @@ function drawGameFrame() {
 
 function updateNavigation() {
   let joyThreshold = 0.22;
-  moveUp = !!pressedKeys["w"] || joystickVecY < -joyThreshold;
-  moveDown = !!pressedKeys["s"] || joystickVecY > joyThreshold;
-  moveLeft = !!pressedKeys["a"] || joystickVecX < -joyThreshold;
-  moveRight = !!pressedKeys["d"] || joystickVecX > joyThreshold;
+  moveUp = !!pressedKeys["w"] || !!pressedKeys["arrowup"] || joystickVecY < -joyThreshold;
+  moveDown = !!pressedKeys["s"] || !!pressedKeys["arrowdown"] || joystickVecY > joyThreshold;
+  moveLeft = !!pressedKeys["a"] || !!pressedKeys["arrowleft"] || joystickVecX < -joyThreshold;
+  moveRight = !!pressedKeys["d"] || !!pressedKeys["arrowright"] || joystickVecX > joyThreshold;
 
   if (moveUp) camY += navSpeed;      // W
   if (moveDown) camY -= navSpeed;    // S
@@ -827,13 +1050,18 @@ function getJoystickBase() {
 
 function drawIsometricMugPanel() {
   // Positioned outside the original 800x800 view, to the right of corner flowers.
-  let mugX = width + 226;
-  let mugY = 348;
+  let mugX = width + 170;
+  let mugY = 490;
   let mugW = 170;
   let mugH = 76;
   let dot = 4;
   let row = 8;
+  let mugScale = 0.5;
 
+  push();
+  translate(mugX, mugY);
+  scale(mugScale);
+  translate(-mugX, -mugY);
   noStroke();
 
   // Rectangular mug body with straighter sides.
@@ -843,8 +1071,8 @@ function drawIsometricMugPanel() {
   drawDotRoundedRect(mugX - 82, mugY - 2, 164, 154, 10, dot, row); // rectangular body
   fill(227, 123, 161);
   drawDotRoundedRect(mugX - 72, mugY + 16, 144, 26, 6, dot, row); // glaze band
-  fill(214, 206, 192);
-  drawDotRoundedRect(mugX + 28, mugY + 8, 34, 126, 6, dot, row); // side shadow
+  fill(245, 224, 186);
+  drawDotRoundedRect(mugX + 54, mugY + 8, 8, 126, 6, dot, row); // narrow highlight keeps side straight
   fill(227, 123, 161);
   drawDotRoundedRect(mugX - 34, mugY + 120, 68, 22, 6, dot, row); // foot ring
 
@@ -857,6 +1085,7 @@ function drawIsometricMugPanel() {
   drawDotRing(mugX + mugW / 2 + 16, mugY + 60, 58, 90, 18, dot, row);
   fill(255, 237, 194);
   drawDotEllipse(mugX + mugW / 2 + 8, mugY + 60, 14, 58, dot, row);
+  pop();
 }
 
 function drawVaseBouquetPanel() {
@@ -869,7 +1098,7 @@ function drawVaseBouquetPanel() {
   noStroke();
 
   // Stems
-  fill(108, 142, 104);
+  fill("#e8bac5");
   drawDotStem(vaseX - 40, vaseY - 170, vaseX - 18, vaseY - 34, dot, row);
   drawDotStem(vaseX - 20, vaseY - 190, vaseX - 10, vaseY - 36, dot, row);
   drawDotStem(vaseX + 0, vaseY - 182, vaseX + 0, vaseY - 36, dot, row);
@@ -877,36 +1106,93 @@ function drawVaseBouquetPanel() {
   drawDotStem(vaseX + 44, vaseY - 174, vaseX + 18, vaseY - 34, dot, row);
 
   // Leaves
-  fill(124, 166, 114);
+  fill("#f2d1d9");
   drawDotLeaf(vaseX - 30, vaseY - 118, 26, 14, -0.4, dot, row);
   drawDotLeaf(vaseX + 24, vaseY - 124, 28, 14, 0.5, dot, row);
   drawDotLeaf(vaseX - 8, vaseY - 96, 24, 12, 0.3, dot, row);
 
   // Bouquet flowers
-  fill(250, 198, 206);
+  fill(252, 169, 187); //soft pink
   drawDotFlowerHead(vaseX - 46, vaseY - 186, 24, dot, row);
-  fill(204, 200, 255);
+  fill(212, 186, 205); //blue
   drawDotFlowerHead(vaseX - 22, vaseY - 206, 22, dot, row);
-  fill(246, 216, 168);
+  fill(250, 170, 125); //light cream
   drawDotFlowerHead(vaseX + 2, vaseY - 198, 24, dot, row);
-  fill(255, 179, 179);
+  fill(255, 179, 179); //light pink
   drawDotFlowerHead(vaseX + 28, vaseY - 208, 22, dot, row);
-  fill(203, 228, 255);
+  fill(209, 186, 212); //light blue
   drawDotFlowerHead(vaseX + 52, vaseY - 188, 24, dot, row);
 
   // Vase neck
-  fill(197, 214, 238);
+  fill(226, 168, 122); // less green neck
   drawDotRoundedRect(vaseX - 30, vaseY - 34, 60, 24, 10, dot, row);
 
   // Vase body (traditional round body + subtle shading)
-  fill(213, 229, 252);
+  fill(240, 184, 124); // less green body
   drawDotEllipse(vaseX, vaseY + 42, 150, 158, dot, row);
-  fill(188, 206, 232);
+  fill(206, 152, 106); // less green side shade
   drawDotEllipse(vaseX + 26, vaseY + 46, 44, 120, dot, row);
 
   // Vase foot
-  fill(197, 214, 238);
+  fill(218, 162, 114); // less green foot
   drawDotRoundedRect(vaseX - 34, vaseY + 108, 68, 20, 8, dot, row);
+}
+
+function drawOilLanternPanel() {
+  // Upper-right panel, styled after a classic glass-chimney oil lantern.
+  let lx = width + 225; // moved left for visibility
+  let ly = 200;
+  let dot = 3.2;
+  let row = 6;
+
+  push();
+  translate(lx, ly);
+  scale(lanternScale);
+  translate(-lx, -ly);
+  noStroke();
+
+  // Top rim/cap
+  fill(178, 160, 146);
+  drawDotEllipse(lx, ly - 128, 34, 12, dot, row);
+  fill(196, 179, 165);
+  drawDotRoundedRect(lx - 14, ly - 132, 28, 8, 4, dot, row);
+
+  // Glass chimney: neck + bulb + lower neck
+  fill(236, 241, 246);
+  drawDotEllipse(lx, ly - 90, 30, 70, dot, row);
+  drawDotEllipse(lx, ly - 50, 54, 62, dot, row);
+  drawDotEllipse(lx, ly - 16, 34, 36, dot, row);
+  fill(210, 222, 233);
+  drawDotEllipse(lx + 10, ly - 54, 12, 92, dot, row); // glass highlight/shadow
+
+  // Burner deck + flame + support wires
+  fill(164, 136, 104);
+  drawDotRoundedRect(lx - 30, ly + 2, 60, 14, 5, dot, row);
+  fill(255, 203, 118);
+  drawDotEllipse(lx, ly - 2, 10, 20, dot, row);
+  fill(120, 96, 72);
+  drawDotStem(lx - 24, ly + 6, lx - 8, ly - 2, dot, row);
+  drawDotStem(lx + 24, ly + 6, lx + 8, ly - 2, dot, row);
+
+  // Burner knob
+  fill(154, 118, 80);
+  drawDotEllipse(lx + 34, ly + 12, 14, 10, dot, row);
+
+  // Fuel reservoir (rounded bowl)
+  fill(226, 214, 205);
+  drawDotEllipse(lx, ly + 44, 96, 58, dot, row);
+  fill(204, 189, 177);
+  drawDotEllipse(lx + 18, ly + 44, 28, 44, dot, row);
+
+  // Neck + foot
+  fill(205, 220, 232);
+  drawDotEllipse(lx, ly + 78, 34, 24, dot, row);
+  drawDotRoundedRect(lx - 10, ly + 82, 20, 22, 6, dot, row);
+  fill(200, 216, 230);
+  drawDotEllipse(lx, ly + 102, 84, 26, dot, row);
+  fill(182, 198, 214);
+  drawDotEllipse(lx, ly + 108, 92, 14, dot, row);
+  pop();
 }
 
 function drawDotEllipse(cx, cy, w, h, dot, spacing) {
@@ -1019,18 +1305,20 @@ function drawDotFlowerHead(cx, cy, radius, dot, spacing) {
       playDreamChime();
     }
 
-    if (key === 'f' || key === 'F') {
-      showGameFrame = !showGameFrame;
-    }
-
     // Keep browser from handling movement keys (scroll/focus behavior).
-    if (key === 'w' || key === 'W' || key === 'a' || key === 'A' || key === 's' || key === 'S' || key === 'd' || key === 'D') {
+    if (
+      key === 'w' || key === 'W' || key === 'a' || key === 'A' || key === 's' || key === 'S' || key === 'd' || key === 'D' ||
+      keyCode === UP_ARROW || keyCode === DOWN_ARROW || keyCode === LEFT_ARROW || keyCode === RIGHT_ARROW
+    ) {
       return false;
     }
   }
 
 function keyReleased() {
-  if (key === 'w' || key === 'W' || key === 'a' || key === 'A' || key === 's' || key === 'S' || key === 'd' || key === 'D') {
+  if (
+    key === 'w' || key === 'W' || key === 'a' || key === 'A' || key === 's' || key === 'S' || key === 'd' || key === 'D' ||
+    keyCode === UP_ARROW || keyCode === DOWN_ARROW || keyCode === LEFT_ARROW || keyCode === RIGHT_ARROW
+  ) {
     return false;
   }
 }
@@ -1048,7 +1336,7 @@ function windowBlurred() {
 function setupKeyboardControls() {
   window.addEventListener("keydown", (e) => {
     let k = (e.key || "").toLowerCase();
-    if (k === "w" || k === "a" || k === "s" || k === "d") {
+    if (k === "w" || k === "a" || k === "s" || k === "d" || k === "arrowup" || k === "arrowdown" || k === "arrowleft" || k === "arrowright") {
       pressedKeys[k] = true;
       e.preventDefault();
     }
@@ -1056,7 +1344,7 @@ function setupKeyboardControls() {
 
   window.addEventListener("keyup", (e) => {
     let k = (e.key || "").toLowerCase();
-    if (k === "w" || k === "a" || k === "s" || k === "d") {
+    if (k === "w" || k === "a" || k === "s" || k === "d" || k === "arrowup" || k === "arrowdown" || k === "arrowleft" || k === "arrowright") {
       pressedKeys[k] = false;
       e.preventDefault();
     }
@@ -1081,15 +1369,21 @@ function generatePattern(){
   flowerCount = doilyShape === "circle" ? floor(random(6,10)) : floor(random(7,11));
 
 
-  palette = random(palettes);
+  paletteIndex = floor(random(palettes.length));
+  palette = palettes[paletteIndex];
 
 
   flowerColors = [];
+  cornerFlowerColors = [];
   butterflyPositions = [];
 
 
   for(let i = 0; i < flowerCount; i++){
     flowerColors.push(random(palette));
+  }
+
+  for (let i = 0; i < 4; i++) {
+    cornerFlowerColors.push(random(palette));
   }
 
 
@@ -1101,7 +1395,6 @@ function generatePattern(){
 }
 
 
-// CLICK TO ADVANCE POEM
 function mousePressed() {
   if (isInsideJoystick(mouseX, mouseY)) {
     joystickActive = true;
@@ -1109,9 +1402,15 @@ function mousePressed() {
     return false;
   }
 
-  startSound();
-  poemIndex = (poemIndex + 1) % poem.length;
-  poemAlpha = 0; // resets fade every click
+  // Touch taps are handled in touchStarted so we do not double-advance with synthetic mouse events.
+  if (touches.length > 0) return;
+
+  if (isPointerOverPoemText(mouseX, mouseY)) {
+    startSound();
+    poemIndex = (poemIndex + 1) % poem.length;
+    poemAlpha = 0;
+    lastPoemCycleMs = millis();
+  }
 }
 
 function mouseDragged() {
@@ -1133,6 +1432,13 @@ function touchStarted() {
     joystickActive = true;
     updateJoystickFromPointer(t.x, t.y);
     return false;
+  }
+
+  if (isPointerOverPoemText(t.x, t.y)) {
+    startSound();
+    poemIndex = (poemIndex + 1) % poem.length;
+    poemAlpha = 0;
+    lastPoemCycleMs = millis();
   }
 }
 
